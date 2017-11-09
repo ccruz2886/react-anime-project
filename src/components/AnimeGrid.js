@@ -18,9 +18,16 @@ const CircularProgressStyle = Styled(CircularProgress)`
 const GridContainer = Styled.div``;
 
 class AnimeGrid extends React.PureComponent {
+  state = {
+    dataSource: [],    
+  }
+  
+  lastScrollTop = 0;
+
   static defaultProps = {
     infiniteScroll: true,
     loadBeforeScrollEnd: 500,
+    dataSourceLimit: 60,
   }
 
   static propTypes = {
@@ -32,9 +39,17 @@ class AnimeGrid extends React.PureComponent {
     fetchNextPageAnimeList: PropTypes.func.isRequired,
   }
 
+  componentWillReceiveProps = ({ animes }) => {
+    if (this.props.animes.length !== animes.length){
+      let newAnimeData = this.getInitialDataSource(animes);
+      this.setState({ dataSource: newAnimeData });
+    }
+  }
+
   componentDidMount = () => {
-    const { isFeching, fetchAnimesListIfIsNeeded } = this.props;
-    if (!isFeching) {
+    const { isFeching, fetchAnimesListIfIsNeeded, animes } = this.props;
+
+    if (!isFeching) {    
       fetchAnimesListIfIsNeeded();
     }
 
@@ -42,6 +57,9 @@ class AnimeGrid extends React.PureComponent {
       window.addEventListener('scroll', this.handleScroll);
       window.addEventListener('resize', this.handleScroll);
     }
+
+    let newDataSource = this.getInitialDataSource(animes);
+    this.setState({ dataSource: newDataSource });
   }
 
   componentWillUnmount = () => {
@@ -51,29 +69,77 @@ class AnimeGrid extends React.PureComponent {
     }
   };
 
-  /** Fech the next page if is in the end of the limit of the scrool setup in the option */
-  handleScroll = () => {
+  getInitialDataSource = animes => {
+    let newDataSource = animes;
+    let { dataSourceLimit } = this.props;
+
+    if (animes.length > dataSourceLimit) {
+      let lastIndex = animes.length;
+      let startIndex = animes.length - (dataSourceLimit + 1);
+      newDataSource = animes.slice(startIndex, lastIndex);
+    }
+    return newDataSource;
+  }
+
+  fetchNextPageAnime = () => {
     if (this.props.isFeching) {
       return;
     }
 
+    const { dataSource } = this.state;
+    const { animes } = this.props;
+    const isLastDataSource = animes[animes.length - 1].id === dataSource[dataSource.length - 1].id;
     const currentWindowHeight =
       (window.innerHeight + window.scrollY) + this.props.loadBeforeScrollEnd;
 
-    if (currentWindowHeight >= document.body.offsetHeight) {
+    if (currentWindowHeight >= document.body.offsetHeight && isLastDataSource) {
       this.props.fetchNextPageAnimeList();
     }
+  }
+
+  setPrevPageDataSource = () => {
+    const isScrollDirectionTop = window.scrollY < this.lastScrollTop;
+    const currentScrollPosition = window.scrollY - this.props.loadBeforeScrollEnd;
+
+    if (isScrollDirectionTop && currentScrollPosition <= 0) {   
+      let firstDataSource =  this.state.dataSource[0];
+      let { animes } = this.props;
+
+      if (firstDataSource.id === animes[0].id){
+        return;        
+      }
+
+      let firstElementIndex = 
+        animes.findIndex(element => element.id === firstDataSource.id);
+
+      let lastIndex = firstElementIndex - 1;
+      let startIndex = firstElementIndex - this.props.dataSourceLimit;
+
+      startIndex = startIndex < 0 ? 0 : startIndex;
+
+      let newDataSource = animes.slice(startIndex, lastIndex);
+      window.scrollTo(0, document.body.scrollHeight);
+      this.setState({dataSource: newDataSource});
+    }
+
+    this.lastScrollTop = window.scrollY;
+  }
+
+  /** Fech the next page if is in the end of the limit of the scrool setup in the option */
+  handleScroll = () => {
+    this.fetchNextPageAnime();
+    this.setPrevPageDataSource();
   }
 
   /** Fech the next page if this function is trigger */
   handleLoadMore = () => this.props.fetchNextPageAnimeList();
 
-
   render = () => {
-    const { infiniteScroll, animes, isFeching } = this.props;
+    const { infiniteScroll, isFeching } = this.props;
+    console.log(this.state.dataSource);
     return (
       <GridContainer>
-        <AnimeGridList animes={animes} />
+        <AnimeGridList animes={this.state.dataSource} />
         <LoadMoreContainer>
           {isFeching && <CircularProgressStyle />}
           {!isFeching && !infiniteScroll && <RaisedButton onClick={this.handleLoadMore} label="Load More Animes" primary />}
