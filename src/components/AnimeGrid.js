@@ -4,7 +4,7 @@ import Styled from 'styled-components';
 import CircularProgress from 'material-ui/CircularProgress';
 import RaisedButton from 'material-ui/RaisedButton';
 import PropTypes from 'prop-types';
-
+import _ from 'underscore';
 import AnimeGridList from './AnimeGridList';
 
 const LoadMoreContainer = Styled.div`
@@ -27,7 +27,7 @@ class AnimeGrid extends React.PureComponent {
   static defaultProps = {
     infiniteScroll: true,
     loadBeforeScrollEnd: 500,
-    dataSourceLimit: 60,
+    dataSourceLimit: 45,
   }
 
   static propTypes = {
@@ -54,8 +54,10 @@ class AnimeGrid extends React.PureComponent {
     }
 
     if (this.props.infiniteScroll) {
-      window.addEventListener('scroll', this.handleScroll);
-      window.addEventListener('resize', this.handleScroll);
+
+      let handleScroll = _.debounce(this.handleScroll, 100);
+      window.addEventListener('scroll', handleScroll);
+      window.addEventListener('resize', handleScroll);
     }
 
     let newDataSource = this.getInitialDataSource(animes);
@@ -75,7 +77,7 @@ class AnimeGrid extends React.PureComponent {
 
     if (animes.length > dataSourceLimit) {
       let lastIndex = animes.length;
-      let startIndex = animes.length - (dataSourceLimit + 1);
+      let startIndex = animes.length - dataSourceLimit;
       newDataSource = animes.slice(startIndex, lastIndex);
     }
     return newDataSource;
@@ -100,11 +102,11 @@ class AnimeGrid extends React.PureComponent {
   setPrevPageDataSource = () => {
     const isScrollDirectionTop = window.scrollY < this.lastScrollTop;
     const currentScrollPosition = window.scrollY - this.props.loadBeforeScrollEnd;
-
-    if (isScrollDirectionTop && currentScrollPosition <= 0) {   
+    if (isScrollDirectionTop && currentScrollPosition <= 0) {
+            
       let firstDataSource =  this.state.dataSource[0];
       let { animes } = this.props;
-
+      
       if (firstDataSource.id === animes[0].id){
         return;        
       }
@@ -112,23 +114,48 @@ class AnimeGrid extends React.PureComponent {
       let firstElementIndex = 
         animes.findIndex(element => element.id === firstDataSource.id);
 
-      let lastIndex = firstElementIndex - 1;
-      let startIndex = firstElementIndex - this.props.dataSourceLimit;
+      let dataSourceLimitMiddle = (this.props.dataSourceLimit / 2);
+      let lastIndex = firstElementIndex + dataSourceLimitMiddle;
+      let startIndex = firstElementIndex - dataSourceLimitMiddle;
 
       startIndex = startIndex < 0 ? 0 : startIndex;
 
       let newDataSource = animes.slice(startIndex, lastIndex);
-      window.scrollTo(0, document.body.scrollHeight);
+
       this.setState({dataSource: newDataSource});
     }
 
     this.lastScrollTop = window.scrollY;
   }
 
+  setNextPageDataSource = () => {
+    const { dataSource } = this.state;
+    const { animes } = this.props;
+    const isNotLastDatasource = animes[animes.length - 1].id !== dataSource[dataSource.length - 1].id;
+    const currentWindowHeight =
+      (window.innerHeight + window.scrollY) + this.props.loadBeforeScrollEnd;
+
+    if (currentWindowHeight >= document.body.offsetHeight && isNotLastDatasource) {
+      let lastDataSourceItem =  this.state.dataSource[this.state.dataSource.length - 1];
+
+      let lastElementIndex = 
+        animes.findIndex(element => element.id === lastDataSourceItem.id);
+
+      let dataSourceLimitMiddle = (this.props.dataSourceLimit / 2);
+      let lastIndex = lastElementIndex + dataSourceLimitMiddle;
+      let startIndex = lastElementIndex - dataSourceLimitMiddle;
+
+      let newDataSource = animes.slice(startIndex, lastIndex);
+
+      this.setState({dataSource: newDataSource});
+    }
+  }
+
   /** Fech the next page if is in the end of the limit of the scrool setup in the option */
   handleScroll = () => {
     this.fetchNextPageAnime();
     this.setPrevPageDataSource();
+    this.setNextPageDataSource();
   }
 
   /** Fech the next page if this function is trigger */
